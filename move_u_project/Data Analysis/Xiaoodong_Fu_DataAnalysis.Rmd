@@ -1,0 +1,112 @@
+---
+title: "STA490_Winter_Data_Analysis"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(nlme)
+require(lme4)
+```
+
+```{r,include=FALSE}
+data <- read.csv("new_data.csv")
+data$Exercise2[287] <- 0
+```
+
+# 1.Goal of Data Analysis
+In the EDA phase, I found that the exercises, alongside with confounders such as number of stressors, average hours of sleep and BMI, have certain degrees of effects on the mental health status of subjects/students. In this data analysis, I want to further investigate whether or not the effects of these variables are statistically significant on the topic of investigation.
+
+# 2.How you have chosen your model(s)
+## 2.1.Response variable: Mental Health Indicator (Likert Scale 1-7)
+I have created a mental health indicator using question 15-19 of the questionnaire, which assess the subject's concentration, energy level, feeling and sleep quality. **On a likert scale of 1-7, the lower the indicator the subjects are at, the better mental state they are at.**
+```{r}
+data$Overall.Health = rowMeans(data[,c("Health1","Health2","Health3","Health4","Health5")])
+
+data1 <- data %>%
+  group_by(Overall.Health,SurveyMonth) %>%
+  summarise(counts = n()) 
+
+ggplot(data1, aes(x=Overall.Health, y= counts,fill = SurveyMonth)) + 
+  geom_bar(stat="identity", position = "dodge") + 
+  scale_fill_brewer(palette = "Set1")
+```
+
+## 2.2.Predictor variables: Amount of Exercises
+According to the WHO guideline, adults aged 18–64 should do at least 150 minutes of moderate-intensity aerobic physical activity throughout the week or do at least 75 minutes of vigorous-intensity aerobic physical activity throughout the week or an equivalent combination of moderate- and vigorous-intensity activity. Hence, we will include those who have met these requirements into the treatment group.
+```{r}
+data <- data %>% 
+  mutate(Treatment = ifelse(Exercise2==150 | Exercise3==75,1,0| (Exercise2/2 + Exercise3)>=75))
+
+data$Treatment[2] = 0
+data$Treatment[6] = 0
+```
+
+## 2.3.Confounders
+In the EDA phase, I have found that the following confounders seem to have a significant effect on the mental health status of the subjects. Hence, they are included in our model.
+```{r}
+data %>% group_by(BMI) %>% 
+  summarize(means = mean(Overall.Health))
+
+data %>% group_by(AvgHoursOfSleep) %>% 
+  summarize(means = mean(Overall.Health))
+
+data %>% group_by(NumStressors) %>% 
+  summarize(means = mean(Overall.Health))
+```
+
+## 2.4.Random Effect
+In this experiment, the 420 observations come from 140 subjects who have completed 3 surveys in the span of 3 months Therefore, to prevent pseudoreplication, I wanted to treat the subject ID as a random effect. Beside subject ID, I also found the difference in month of survey also contributes significant variability(54.05393) in the mental health indicator, hence it is also included as a random effect.
+
+## 2.5.Final Model
+```{r}
+# final model
+mod1 <- nlme::lme(Overall.Health~Treatment+as.factor(BMI)+as.factor(AvgHoursOfSleep)+as.factor(NumStressors), random=list(~1|study.ID,~1|SurveyMonth),data=data)
+```
+
+## 2.4.Random Effect
+In this experiment, the 420 observations come from 140 subjects who have completed 3 surveys in the span of 3 months Therefore, to prevent pseudoreplication, I wanted to treat the subject ID as a random effect. Beside subject ID, I also found the difference in month of survey also contributes significant variability(54.05%) in the mental health indicator, hence it is also included as a random effect.
+```{r}
+knitr::kable(VarCorr(mod1))
+```
+
+# 3.Verify model assumptions and fits
+There are a few model assumptions I want to check: 1. Homogeneity of variance 2. Normality of error term
+
+## 3.1 Homogeneity of variance
+```{r}
+plot(mod1)
+```
+
+This residual plot does not indicate any deviations from a linear form. It also shows relatively constant variance across the fitted range. The slight reduction in apparent variance on the right f the graph are likely a result of there being fewer observations in these predicted areas.
+
+## 3.2 Normality of error terms
+```{r}
+qqnorm(residuals(mod1))
+qqline(residuals(mod1))
+```
+
+The Q-Q Normal Plots do not raise any significant concern with normality of the weighted residuals.
+
+# 4.What you have learned about the answer to the research question
+```{r}
+# fixed effect outputs
+knitr::kable(summary(mod1)$tTable[,-3],digital=3)
+```
+
+Looking at the fixed effects due to treatment, the estimate is -0.0765 (p-value=0.516),indicating that there is no significant difference in the mental health status between the those who have exercised the amount based on WHO recommendation and those who have not. 
+
+However, if we look at our confounder variables, they all have indicated a certain degree of statistical significance, especially for the number of stressor. Looking at the estimates for the number of stressors, there seems to be a distinct trend: with 5 stressors at the baseline estimate, the less stressors the subjects have, the better their mental health status (lower indicators). The same trend happens with the average hours of sleep, the more hours of sleep the subjects have, the better their mental health status. On the other side, the trend in BMI is not as distinct, but from the estimate for those with BMI >29.9, they generally have worst mental health status(p-value=0.0532) than the baseline BMI.
+
+# 5.Potential limitations in your work that you identified during your analysis.
+There are a few limitations to the study:
+
+* By fitting subject ID and survey of monthas as random intercepts, although differences among individuals can be obtained, this also uses a degree of freedom for these variables, severely limiting the power of the model.
+
+* Since our response variable is intially a ranking data("Strongly Agree" to "Strongly Disagree"), we have to be careful in translating it into numerical values, as we have to make sure the new number scale is reflective of the true responses. In these ranking data, we also encounter missing values. These missing values are also difficult to deal with, as sometimes missing values could be due to errors in the data collection process, or subjects miss out on some questions intentionally.

@@ -1,0 +1,112 @@
+---
+title: "STA490_Winter_EDA"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+```
+
+# Data Cleaning
+```{r}
+data = read.csv("new_data.csv")
+data$Exercise2[287] = 0
+```
+
+# Goals of EDA
+I want to investigate whether or not exercises have a positive effect on the mental health of subjects/students. In this analysis, I want to assess the relationship between the overall health state and minutes of exercise of the subject.I have created a mental health indicator using question 15-19 of the questionnaire, which assess the subject's concentration, energy level, feeling and sleep quality. On a scale of 1-7, the higher the indicator the subjects are at, the better mental state they are at. 
+
+Other than the minutes of exercise, I also want to investigate the effects of activeness, stressors and hours of sleep on the subjects' mental health.
+
+# Visualizing distributions
+1. The mental health indicator of the subjects seems to be following a left-skewed distribution, and most of the samples fall under the range of 4-6.
+2. I want to see if there is a strong relationshio between the mental health indicator and the month the survey is taken at. From the boxplot, the means of each month are very similar. However, looking at the range of the boxplot, the mental health indicators in September are relatively more left-skewed than the other two months.
+3. The minutes of exercise of the subjects seems to be right-skewed distributed, with the mean at approximately 200 minutes. There also exists five outliers beyond 600 minutes. After further investigation, it is found that all of these outliers come from 2 subjects (190114,190206).
+```{r}
+# Response Variable: Overall Health
+data1 <- data %>%
+  group_by(Overall.Health,SurveyMonth) %>%
+  summarise(counts = n()) 
+
+boxplot(data$Overall.Health~data$SurveyMonth)
+
+ggplot(data1, aes(x=Overall.Health, y= counts,fill = SurveyMonth)) + 
+  geom_bar(stat="identity", position = "dodge") + 
+  scale_fill_brewer(palette = "Set1")
+
+data %>%
+    group_by(SurveyMonth, Overall.Health) %>%
+    tally() %>%
+  arrange(n)
+
+# Predictor Variabl: Minutes of Exercise
+ggplot(data = data) + geom_histogram(mapping = aes(x = Minutes.of.Exercise),binwidth = 10) + xlim(0,750)
+
+data[data$Minutes.of.Exercise >600,]
+```
+
+# Relationship between Overall Health and predictor variables
+1. Looking at boxplot showing the mental health and minutes of exercise, there does not seem to be an obvious pattern, that indicates more exercises will lead to better mental health.
+2. From the heatmaps, there does not seem to be significant relationship between the overall mental health and number of stressors in the week. However, the hours of sleep and activeness of the subject seems to have a positive relationship the overall mental health.
+3. 
+```{r}
+# Overall Health and Minutes of Exercise (Continous and Categorical)
+boxplot(data$ Minutes.of.Exercise ~ data$Overall.Health,ylim = c(0,750))
+
+# Overall Health and Activeness (Two Categorical)
+
+data %>%
+  count(Overall.Health,ModerateOrHighExercise) %>%
+  ggplot(mapping = aes(x = Overall.Health, y = ModerateOrHighExercise)) +
+  geom_tile(mapping = aes(fill = n))
+
+boxplot(data$Overall.Health~ data$ModerateOrHighExercise)
+
+# Overall Health and Stressor (Two Categorical)
+
+data %>%
+  count(Overall.Health,NumStressors) %>%
+  ggplot(mapping = aes(x = Overall.Health, y = NumStressors)) +
+  geom_tile(mapping = aes(fill = n))
+
+boxplot(data$Overall.Health~data$NumStressors)
+
+# Overall Health and Sleep Hours (Two Categorical)
+
+data %>%
+  count(Overall.Health,AvgHoursOfSleep) %>%
+  ggplot(mapping = aes(x = Overall.Health, y = AvgHoursOfSleep)) +
+  geom_tile(mapping = aes(fill = n))
+
+boxplot(data$Overall.Health~ data$AvgHoursOfSleep)
+```
+
+# Potential Alteration/Improvements
+1. Given that there seems to be a relatively strong relationship between mental health status and the month of survey, it would be good to remove the strong relationship, to help me understand the relationship between mental health status and minutes of exercise.
+
+2. The 420 samples are collected from 140 subjects throughout September-November,meaning multiple samples are collected from the same subject. To prevent pseudoreplication, Study ID could be used as the random effect in the model.
+
+```{r}
+typeOfAerobic <- c("Light","Moderate","Vigorous","Resistance","Flexibility")
+totalMinutes <- c(sum(data$Exercise1,na.rm = TRUE),
+                  sum(data$Exercise2,na.rm = TRUE),
+                  sum(data$Exercise3,na.rm = TRUE),
+                  sum(data$Exercise4,na.rm = TRUE),
+                  sum(data$Exercise5,na.rm = TRUE))
+
+data3 <- data.frame(name =typeOfAerobic ,value=totalMinutes)
+
+# Barplot
+ggplot(data3, aes(x=name, y=value)) + geom_bar(stat = "identity")
+```
+3. In our predictor variable 'minutes of exercise', light aerobic exercises are taking a significant proportion of the exercises. Hence, it would be worth exploring the relationship of minutes of exercises without light aerobic and the other variables, as a lot of light aerobic activities are conducted passively (e.g. commuting to school, walking between classes).
+
